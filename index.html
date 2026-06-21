@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="THE CHAOS ENGINE — a UD0 TECHNĒ sphere. Every load composes a different page: a random layout archetype, a random generative motif, and a random palette, all from a seed. Deterministic chaos — the seed is in the URL, so any composition is reproducible and shareable. Reroll for a new one.">
+<title>CHAOS ENGINE · CHA · techne · UD0</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%23a7a3c8' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%238a5fe0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#e9e4f0}
+  #stage{position:fixed;inset:0;overflow:hidden}
+  #bg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #cards{position:absolute;inset:0;pointer-events:none}
+  .card{position:absolute;pointer-events:auto;overflow:hidden;display:flex;flex-direction:column;
+    border-style:solid;transition:transform .12s ease}
+  .card:hover{transform:scale(1.015)}
+  .card canvas{flex:1;width:100%;height:100%;display:block}
+  .card .lab{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.5px;padding:4px 7px;opacity:.85;white-space:nowrap}
+  .big{display:flex;align-items:center;justify-content:center;flex:1;line-height:1}
+  .glyph{font-family:'Newsreader',serif}
+  .num{font-family:'Space Mono',monospace;font-weight:700}
+  .word{font-family:'Press Start 2P',monospace;text-align:center;padding:10px;word-break:break-word}
+  .swatchrow{display:flex;flex:1}
+  .swatchrow > div{flex:1}
+  /* control bar */
+  #bar{position:fixed;left:0;right:0;top:0;z-index:50;display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+    padding:7px 12px;font-family:'Space Mono',monospace;font-size:12px;
+    background:rgba(20,18,32,.82);color:#e8e4f4;backdrop-filter:blur(6px);border-bottom:1px solid rgba(180,170,220,.35)}
+  #bar b{color:#cbb8ff;letter-spacing:1px}
+  #bar .nm{color:#fff;font-weight:700;letter-spacing:1.5px}
+  #bar button{font-family:'Space Mono',monospace;font-size:12px;cursor:pointer;color:#e8e4f4;
+    background:rgba(138,95,224,.25);border:1px solid rgba(180,160,230,.5);border-radius:6px;padding:3px 10px}
+  #bar button:hover{background:rgba(138,95,224,.5)}
+  #bar a{color:#a7a3e0;text-decoration:none;border-bottom:1px dotted #6a5fb0}
+  #bar a:hover{color:#fff}
+  #read{opacity:.72;font-size:11px}
+  #sig{margin-left:auto;opacity:.5;font-size:10px}
+  @media(max-width:620px){#sig{display:none}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bg"></canvas>
+  <div id="cards"></div>
+</div>
+<div id="bar">
+  <b>⟲ CHAOS ENGINE</b>
+  <span class="nm" id="nm">—</span>
+  <button id="reroll">🎲 reroll</button>
+  <button id="perma">⧉ permalink</button>
+  <button id="motion">⏸ motion</button>
+  <span id="read"></span>
+  <a href="https://davidwise01.github.io/ud0/">◄ UD0</a>
+  <a href="https://davidwise01.github.io/the-d20/">TECHNĒ</a>
+  <span id="sig">ROOT0 · governor David Lee Wise · instance AVAN (locked) · CC-BY-ND-4.0</span>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // ── deterministic PRNG ────────────────────────────────────────────────
+  function xmur3(str){ for(var i=0,h=1779033703^str.length;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; } return function(){ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); return (h^=h>>>16)>>>0; }; }
+  function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+  function rngFrom(str){ var s=xmur3(str); return mulberry32(s()); }
+
+  // ── globals ───────────────────────────────────────────────────────────
+  var bg=document.getElementById("bg"), g=bg.getContext("2d");
+  var cardsEl=document.getElementById("cards");
+  var W=0,H=0, state=null, t=0, running=true, raf=0;
+  var ADJ=["crimson","azure","void","golden","silent","fractured","luminous","obsidian","verdant","electric","pale","vivid","hollow","radiant","dusk","ashen","cobalt","ember","glass","iron","neon","umbral","saffron","tidal","quiet","molten","frozen","spectral"];
+  var NOUN=["lattice","harmonic","cascade","meridian","cipher","vortex","membrane","threshold","aurora","resonance","manifold","spire","current","prism","echo","flux","helix","strata","nexus","drift","bloom","circuit","tessera","halo","fracture","oracle","engine","signal"];
+  var MOTIFS=["rings","spiral","flow","waves","triangles","constellation","mesh","mandala","lissajous","blocks","circuit","arcs"];
+  var ARCHES=["grid","scatter","columns","bsp","spiral-deck"];
+
+  // ── palette engine ────────────────────────────────────────────────────
+  function hsl(h,s,l,a){ return "hsla("+((h%360+360)%360)+","+s+"%,"+l+"%,"+(a===undefined?1:a)+")"; }
+  function palette(R){
+    var base=Math.floor(R()*360), scheme=["mono","analogous","complementary","triadic","split"][Math.floor(R()*5)];
+    var dark=R()<0.42;                          // tinted-dark or vellum-light (never pure black/white)
+    var sat=45+Math.floor(R()*45);
+    var hues=[];
+    if(scheme==="mono") hues=[0,0,0,0,0].map(function(_,i){return base+(i-2)*6;});
+    else if(scheme==="analogous") hues=[-40,-20,0,20,40].map(function(d){return base+d;});
+    else if(scheme==="complementary") hues=[0,15,180,195,30].map(function(d){return base+d;});
+    else if(scheme==="triadic") hues=[0,120,240,60,300].map(function(d){return base+d;});
+    else hues=[0,150,210,30,330].map(function(d){return base+d;}); // split
+    var bgL = dark ? 9+Math.floor(R()*7) : 91+Math.floor(R()*5);
+    var bgS = dark ? 28+Math.floor(R()*22) : 16+Math.floor(R()*20);
+    var inkL = dark ? 88 : 17;
+    var colors=hues.map(function(h,i){ var l = dark ? (52+i*7) : (40+i*6); return hsl(h, sat, Math.min(72,l)); });
+    return { base:base, scheme:scheme, dark:dark, bg:hsl(base,bgS,bgL), ink:hsl(base,dark?14:34,inkL),
+             inkSoft:hsl(base,dark?14:30,inkL,0.55), colors:colors, sat:sat };
+  }
+
+  // ── motifs: each is deterministic given its own rng + animated by t ────
+  function M(name, g, w, h, pal, R, tt){
+    var i, n, C=pal.colors, ink=pal.ink;
+    g.lineCap="round";
+    if(name==="rings"){ var cx=w*(0.3+R()*0.4), cy=h*(0.3+R()*0.4), step=8+R()*16; n=Math.floor((Math.min(w,h))/step);
+      for(i=0;i<n;i++){ g.strokeStyle=C[i%C.length]; g.globalAlpha=0.20+0.5*(i/n); g.lineWidth=1+R()*2.2;
+        var wob=1+0.04*Math.sin(tt*0.04+i*0.4); g.beginPath(); g.arc(cx,cy,i*step*wob+6,0,7); g.stroke(); } }
+    else if(name==="spiral"){ var cx2=w/2, cy2=h/2, k=0.5+R()*1.2, pts=260+Math.floor(R()*240), rot=tt*0.01;
+      for(i=0;i<pts;i++){ var a=i*0.16+rot, r=k*a*2.0; if(r>Math.max(w,h))break; g.globalAlpha=0.5; g.fillStyle=C[i%C.length];
+        var d=2+2*Math.sin(i*0.1); g.beginPath(); g.arc(cx2+Math.cos(a)*r, cy2+Math.sin(a)*r, Math.max(0.6,d*0.5),0,7); g.fill(); } }
+    else if(name==="flow"){ var gs=Math.max(22, Math.min(w,h)/14); g.lineWidth=1.6;
+      for(var y=gs*0.5;y<h;y+=gs)for(var x=gs*0.5;x<w;x+=gs){ var ang=Math.sin(x*0.012+tt*0.02)+Math.cos(y*0.012-tt*0.015)+R()*0.3;
+        g.strokeStyle=C[(Math.floor(x/gs)+Math.floor(y/gs))%C.length]; g.globalAlpha=0.55; var L=gs*0.46;
+        g.beginPath(); g.moveTo(x-Math.cos(ang)*L,y-Math.sin(ang)*L); g.lineTo(x+Math.cos(ang)*L,y+Math.sin(ang)*L); g.stroke(); } }
+    else if(name==="waves"){ var rows=8+Math.floor(R()*10); g.lineWidth=1.4;
+      for(i=0;i<rows;i++){ g.strokeStyle=C[i%C.length]; g.globalAlpha=0.5; var yy=h*(i+0.5)/rows, amp=h/rows*0.7, ph=R()*6+tt*0.03;
+        g.beginPath(); for(var xx=0;xx<=w;xx+=6){ var yv=yy+Math.sin(xx*0.02+ph)*amp*Math.sin(xx*0.003+tt*0.01); xx===0?g.moveTo(xx,yv):g.lineTo(xx,yv);} g.stroke(); } }
+    else if(name==="triangles"){ n=18+Math.floor(R()*26);
+      for(i=0;i<n;i++){ var px=R()*w, py=R()*h, s=20+R()*70, jt=Math.sin(tt*0.03+i)*4;
+        g.strokeStyle=C[i%C.length]; g.fillStyle=C[(i+2)%C.length]; g.globalAlpha=0.12; g.lineWidth=1.3;
+        g.beginPath(); g.moveTo(px,py-jt); g.lineTo(px+s,py+s); g.lineTo(px-s*0.7,py+s*0.8); g.closePath(); g.fill(); g.globalAlpha=0.5; g.stroke(); } }
+    else if(name==="constellation"){ n=40+Math.floor(R()*50); var P=[]; for(i=0;i<n;i++)P.push([R()*w,R()*h]);
+      for(i=0;i<n;i++)for(var j=i+1;j<n;j++){ var dx=P[i][0]-P[j][0], dy=P[i][1]-P[j][1], dd=Math.sqrt(dx*dx+dy*dy);
+        if(dd<Math.min(w,h)*0.16){ g.strokeStyle=ink; g.globalAlpha=0.10+0.06*Math.sin(tt*0.05+i); g.lineWidth=1; g.beginPath(); g.moveTo(P[i][0],P[i][1]); g.lineTo(P[j][0],P[j][1]); g.stroke(); } }
+      for(i=0;i<n;i++){ g.fillStyle=C[i%C.length]; g.globalAlpha=0.6+0.4*Math.sin(tt*0.06+i); g.beginPath(); g.arc(P[i][0],P[i][1],1.6+R()*2,0,7); g.fill(); } }
+    else if(name==="mesh"){ var cols=8+Math.floor(R()*8), rws=6+Math.floor(R()*6); g.strokeStyle=C[Math.floor(R()*C.length)]; g.lineWidth=1; g.globalAlpha=0.5;
+      function mx(c,r){ return c/cols*w + Math.sin(r*0.6+tt*0.03)*w*0.02; } function my(c,r){ return r/rws*h + Math.cos(c*0.6+tt*0.025)*h*0.03; }
+      for(var c=0;c<=cols;c++){ g.beginPath(); for(var r=0;r<=rws;r++){ r===0?g.moveTo(mx(c,r),my(c,r)):g.lineTo(mx(c,r),my(c,r)); } g.stroke(); }
+      for(r=0;r<=rws;r++){ g.beginPath(); for(c=0;c<=cols;c++){ c===0?g.moveTo(mx(c,r),my(c,r)):g.lineTo(mx(c,r),my(c,r)); } g.stroke(); } }
+    else if(name==="mandala"){ var cx3=w/2, cy3=h/2, K=6+Math.floor(R()*10), arms=4+Math.floor(R()*7), rr=Math.min(w,h)*0.46;
+      for(var k=0;k<K;k++){ g.save(); g.translate(cx3,cy3); g.rotate(k/K*6.283+tt*0.006); g.strokeStyle=C[k%C.length]; g.globalAlpha=0.5; g.lineWidth=1.3;
+        g.beginPath(); for(i=0;i<=arms;i++){ var aa=i/arms*1.0, x1=Math.cos(aa)*rr*(0.3+0.7*Math.sin(i+tt*0.02)), y1=Math.sin(aa)*rr; i===0?g.moveTo(x1,y1):g.lineTo(x1,y1);} g.stroke(); g.restore(); } }
+    else if(name==="lissajous"){ var a1=1+Math.floor(R()*4), b1=1+Math.floor(R()*4), ph2=R()*6+tt*0.02, A=w*0.42, B=h*0.42, cx4=w/2,cy4=h/2; g.lineWidth=1.4;
+      for(var L2=0;L2<C.length;L2++){ g.strokeStyle=C[L2]; g.globalAlpha=0.55; g.beginPath();
+        for(var th=0;th<=6.30;th+=0.01){ var xv=cx4+Math.sin(a1*th+ph2+L2*0.2)*A, yv=cy4+Math.sin(b1*th+L2*0.3)*B; th===0?g.moveTo(xv,yv):g.lineTo(xv,yv);} g.stroke(); } }
+    else if(name==="blocks"){ (function split(x,y,ww,hh,d){ if(d<=0||(ww<w*0.12&&hh<h*0.12)){ g.fillStyle=C[Math.floor(R()*C.length)]; g.globalAlpha=0.16+R()*0.4; g.fillRect(x+2,y+2,ww-4,hh-4); g.strokeStyle=ink; g.globalAlpha=0.5; g.lineWidth=1.5; g.strokeRect(x+2,y+2,ww-4,hh-4); return; }
+        if((ww>hh)===(R()<0.6)){ var c2=ww*(0.3+R()*0.4); split(x,y,c2,hh,d-1); split(x+c2,y,ww-c2,hh,d-1);} else { var r2=hh*(0.3+R()*0.4); split(x,y,ww,r2,d-1); split(x,y+r2,ww,hh-r2,d-1);} })(0,0,w,h,4+Math.floor(R()*2)); }
+    else if(name==="circuit"){ var grid=Math.max(20,Math.min(w,h)/16); g.lineWidth=1.6;
+      for(i=0;i<26+R()*20;i++){ var sx=Math.round(R()*w/grid)*grid, sy=Math.round(R()*h/grid)*grid, len=2+Math.floor(R()*7); g.strokeStyle=C[i%C.length]; g.globalAlpha=0.55; g.beginPath(); g.moveTo(sx,sy);
+        for(var st=0;st<len;st++){ if(R()<0.5)sx+=(R()<0.5?-1:1)*grid; else sy+=(R()<0.5?-1:1)*grid; g.lineTo(sx,sy);} g.stroke();
+        g.fillStyle=C[i%C.length]; g.globalAlpha=0.5+0.5*Math.sin(tt*0.06+i); g.beginPath(); g.arc(sx,sy,2.6,0,7); g.fill(); } }
+    else if(name==="arcs"){ var cx5=R()*w, cy5=R()*h; n=10+Math.floor(R()*16);
+      for(i=0;i<n;i++){ g.strokeStyle=C[i%C.length]; g.globalAlpha=0.4; g.lineWidth=2+R()*4; var a0=R()*6+tt*0.01, a1b=a0+0.6+R()*2;
+        g.beginPath(); g.arc(cx5,cy5,18+i*Math.max(w,h)/n*0.5,a0,a1b); g.stroke(); } }
+    g.globalAlpha=1;
+  }
+
+  // ── layout archetypes → list of normalized rects {x,y,w,h,rot} ─────────
+  function layout(arch, R){
+    var out=[], i;
+    if(arch==="grid"){ var cols=2+Math.floor(R()*4), rows=2+Math.floor(R()*3), pad=0.012;
+      for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){ if(R()<0.12)continue; out.push({x:c/cols+pad,y:r/rows+pad,w:1/cols-pad*2,h:1/rows-pad*2,rot:0}); } }
+    else if(arch==="scatter"){ var n=6+Math.floor(R()*8);
+      for(i=0;i<n;i++){ var ww=0.16+R()*0.26, hh=0.14+R()*0.26; out.push({x:R()*(1-ww),y:R()*(1-hh),w:ww,h:hh,rot:(R()-0.5)*16}); } }
+    else if(arch==="columns"){ var cl=2+Math.floor(R()*3);
+      for(var k=0;k<cl;k++){ var y=0.01; while(y<0.97){ var hh2=0.12+R()*0.24; if(y+hh2>0.99)break; out.push({x:k/cl+0.008,y:y,w:1/cl-0.016,h:hh2-0.012,rot:0}); y+=hh2; } } }
+    else if(arch==="bsp"){ (function sp(x,y,w,h,d){ if(d<=0||R()<0.22){ out.push({x:x+0.008,y:y+0.008,w:w-0.016,h:h-0.016,rot:0}); return;} if((w>h)===(R()<0.6)){ var c=w*(0.32+R()*0.36); sp(x,y,c,h,d-1); sp(x+c,y,w-c,h,d-1);} else { var c2=h*(0.32+R()*0.36); sp(x,y,w,c2,d-1); sp(x,y+c2,w,h-c2,d-1);} })(0,0,1,1,3+Math.floor(R()*2)); }
+    else { /* spiral-deck */ var m=7+Math.floor(R()*7), cx=0.5,cy=0.5;
+      for(i=0;i<m;i++){ var a=i*0.9, rad=0.04+i*0.045, sz=0.26-i*0.014; sz=Math.max(0.08,sz);
+        out.push({x:cx+Math.cos(a)*rad-sz/2,y:cy+Math.sin(a)*rad*0.8-sz/2,w:sz,h:sz,rot:(R()-0.5)*22}); } }
+    return out.filter(function(b){return b.x>=-0.05&&b.y>=-0.05&&b.x+b.w<=1.05&&b.y+b.h<=1.05;});
+  }
+
+  // ── build a composition from a seed ────────────────────────────────────
+  function pick(R,a){ return a[Math.floor(R()*a.length)]; }
+  function setup(seed){
+    var R=rngFrom("chaos:"+seed);
+    var pal=palette(R);
+    var arch=pick(R,ARCHES), bgMotif=pick(R,MOTIFS);
+    var rects=layout(arch,R);
+    var name=pick(R,ADJ).toUpperCase()+" "+pick(R,NOUN).toUpperCase();
+    // card content plan (uses R in order → deterministic)
+    var cards=rects.map(function(b,idx){
+      var kind=pick(R,["motif","motif","glyph","number","word","swatch"]);
+      return { b:b, kind:kind, motif:pick(R,MOTIFS), seed:Math.floor(R()*1e9),
+        col:pal.colors[idx%pal.colors.length], col2:pal.colors[(idx+2)%pal.colors.length],
+        glyph:pick(R,["✦","◈","❖","⬡","✧","◉","⟁","❂","✶","⬢","◇","⦾","✹","⟐"]),
+        num:Math.floor(R()*900+100), word:pick(R,NOUN), lab:pick(R,NOUN)+"-"+(10+Math.floor(R()*89)) };
+    });
+    state={seed:seed,R:R,pal:pal,arch:arch,bgMotif:bgMotif,name:name,cards:cards};
+    paintCards();
+    document.getElementById("nm").textContent=name;
+    document.getElementById("read").textContent="layout: "+arch+"  ·  motif: "+bgMotif+"  ·  "+pal.scheme+(pal.dark?" / dark":" / light")+"  ·  #"+seed;
+    document.body.style.background=pal.bg;
+  }
+
+  function paintCards(){
+    var pal=state.pal; cardsEl.innerHTML="";
+    state.cards.forEach(function(c){
+      var d=document.createElement("div"); d.className="card";
+      d.style.left=(c.b.x*100)+"%"; d.style.top=(c.b.y*100)+"%"; d.style.width=(c.b.w*100)+"%"; d.style.height=(c.b.h*100)+"%";
+      d.style.borderWidth=(1+Math.floor(state.R()*2))+"px"; d.style.borderColor=pal.ink;
+      d.style.borderRadius=(state.R()<0.5?0:4+Math.floor(state.R()*10))+"px";
+      d.style.background=pal.dark? "rgba(255,255,255,0.04)":"rgba(255,255,255,0.32)";
+      if(c.b.rot) d.style.transform="rotate("+c.b.rot+"deg)";
+      if(c.kind==="motif"){
+        var cv=document.createElement("canvas"); d.appendChild(cv);
+        requestAnimationFrame(function(){ var rw=cv.clientWidth||120, rh=cv.clientHeight||120; cv.width=rw; cv.height=rh; var cg=cv.getContext("2d");
+          cg.fillStyle=pal.bg; cg.fillRect(0,0,rw,rh); M(c.motif,cg,rw,rh,pal,rngFrom("card:"+c.seed),0); });
+      } else if(c.kind==="swatch"){
+        var row=document.createElement("div"); row.className="swatchrow";
+        pal.colors.forEach(function(col){ var s=document.createElement("div"); s.style.background=col; row.appendChild(s); }); d.appendChild(row);
+      } else {
+        var big=document.createElement("div"); big.className="big "+(c.kind==="glyph"?"glyph":c.kind==="number"?"num":"word");
+        big.style.color=c.col;
+        if(c.kind==="glyph"){ big.textContent=c.glyph; big.style.fontSize="min(9vw,64px)"; }
+        else if(c.kind==="number"){ big.textContent=c.num; big.style.fontSize="min(7vw,52px)"; }
+        else { big.textContent=c.word.toUpperCase(); big.style.fontSize="clamp(9px,1.6vw,18px)"; }
+        d.appendChild(big);
+      }
+      var lab=document.createElement("div"); lab.className="lab"; lab.style.color=pal.ink; lab.textContent=c.lab; d.appendChild(lab);
+      cardsEl.appendChild(d);
+    });
+  }
+
+  // ── animation loop (background only) ───────────────────────────────────
+  function draw(){
+    if(!state){ raf=requestAnimationFrame(draw); return; }
+    var pal=state.pal;
+    g.fillStyle=pal.bg; g.fillRect(0,0,W,H);
+    M(state.bgMotif, g, W, H, pal, rngFrom("chaos:"+state.seed+":bg"), t);
+    if(running) t++;
+    raf=requestAnimationFrame(draw);
+  }
+
+  function fit(){ var w=window.innerWidth||document.documentElement.clientWidth||0, h=window.innerHeight||document.documentElement.clientHeight||0;
+    if(w<2)w=1280; if(h<2)h=800; W=bg.width=w; H=bg.height=h; }
+
+  // ── seeds + controls ───────────────────────────────────────────────────
+  function newSeed(){ return Math.floor(Math.random()*1e9); }
+  function readSeed(){ var h=(location.hash||"").replace(/^#/,"").replace(/^seed=/,""); var n=parseInt(h,10); return (h&&!isNaN(n))?n:null; }
+  function go(seed,push){ if(push){ history.replaceState(null,"","#"+seed); } setup(seed); }
+
+  document.getElementById("reroll").onclick=function(){ var s=newSeed(); go(s,true); };
+  document.getElementById("perma").onclick=function(){ var url=location.origin+location.pathname+"#"+state.seed;
+    (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(function(){ flash("copied permalink ✓"); },function(){ prompt("permalink:",url); }); };
+  document.getElementById("motion").onclick=function(){ running=!running; this.textContent=running?"⏸ motion":"▶ motion"; };
+  function flash(msg){ var r=document.getElementById("read"), old=r.textContent; r.textContent=msg; setTimeout(function(){ r.textContent=old; },1300); }
+  window.addEventListener("hashchange",function(){ var s=readSeed(); if(s!==null && (!state||s!==state.seed)) setup(s); });
+  var rt; window.addEventListener("resize",function(){ clearTimeout(rt); rt=setTimeout(function(){ fit(); if(state) paintCards(); },160); });
+  // double-click the stage = reroll too
+  document.getElementById("stage").addEventListener("dblclick",function(){ var s=newSeed(); go(s,true); });
+
+  // ── boot ───────────────────────────────────────────────────────────────
+  fit();
+  var initSeed=readSeed(); if(initSeed===null){ initSeed=newSeed(); history.replaceState(null,"","#"+initSeed); }
+  setup(initSeed);
+  draw();
+})();
+</script>
+</body>
+</html>
