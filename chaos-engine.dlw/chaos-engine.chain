@@ -1,0 +1,9 @@
+ROOT0-DLW-CHAIN-v1
+index : 568
+slug  : chaos-engine
+seal  : d4d6882e8130dc5a3043917290defc6485ea6dfb59c72c09acfb3901025edb07
+prev  : b818f101eca722c989f654cedb98e153db88ab82e24490ac1b9e07e610899c5b
+link  : ee48d71f2838874575c66a12eff2d249f4371d5f92b5ff0961872d5200f7d10c
+head  : 3447d3a0533aaf1e29a8bdc67a9774884fb3ae9dbc8a17064b7a008ca3c4ec90
+
+— the tether: link = sha256(index|slug|seal|prev). the chain head commits to the whole corpus.
